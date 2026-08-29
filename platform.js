@@ -5,6 +5,7 @@ const read = key => {
 };
 const write = (key, value) => localStorage.setItem(key, JSON.stringify(value));
 const clothes = () => read('rewearClothes');
+const favorites = () => read('rewearFavorites');
 const empty = '<div class="empty"><h2>아직 등록된 옷이 없어요.</h2><p>새 옷을 촬영해 옷 앨범에 보관해보세요.</p></div>';
 
 const file64 = file => new Promise((resolve, reject) => {
@@ -107,11 +108,12 @@ if (analysis) {
   const garment = clothes().find(item => String(item.id) === new URLSearchParams(location.search).get('id'));
   if (!garment) analysis.innerHTML = empty;
   else {
-    analysis.innerHTML = `<article class="listing"><h3>${garment.name}</h3><p>아래 점선 윤곽에 옷의 위치·크기를 맞춘 뒤 현재 사진을 촬영하세요.</p><div class="alignment-guide"><img id="outlineGuide" alt="새 옷 사진에서 추출한 점선 윤곽"><span>BASELINE OUTLINE</span></div><label class="primary upload-now">현재 옷 촬영하기<input id="currentPhoto" type="file" accept="image/*" capture="environment"></label><div id="score"></div></article>`;
+    analysis.innerHTML = `<article class="listing"><h3>${garment.name}</h3><p>카메라 화면의 점선 윤곽에 새 옷 사진 속 옷의 위치와 크기를 맞춘 뒤 촬영하세요.</p><div class="live-camera"><video id="currentCamera" autoplay playsinline muted></video><img id="outlineGuide" alt="새 옷 사진에서 추출한 점선 윤곽"><span>BASELINE OUTLINE · 옷 윤곽을 맞춰주세요</span></div><div class="camera-row"><button id="openCurrentCamera" class="primary" type="button">카메라 열기 <span>⌁</span></button><button id="takeCurrentPhoto" class="outline-button" type="button" disabled>사진 촬영하기</button></div><label class="upload-now">사진 앨범에서 선택<input id="currentPhoto" type="file" accept="image/*" capture="environment"></label><div id="score"></div></article>`;
     makeOutline(garment.photo).then(outline => { const guide = document.querySelector('#outlineGuide'); if (guide) guide.src = outline; }).catch(() => {});
-    document.querySelector('#currentPhoto').onchange = async event => {
+    let stream = null;
+    const stopCamera = () => { stream?.getTracks().forEach(track => track.stop()); stream = null; const video = document.querySelector('#currentCamera'); if (video) video.srcObject = null; };
+    const analysePhoto = async now => {
       try {
-        const now = await file64(event.target.files[0]);
         const base = new Image(), current = new Image();
         await Promise.all([new Promise((ok, no) => { base.onload = ok; base.onerror = no; base.src = garment.photo; }), new Promise((ok, no) => { current.onload = ok; current.onerror = no; current.src = now; })]);
         const score = estimateCondition(base, current), box = document.querySelector('#score');
@@ -120,6 +122,13 @@ if (analysis) {
         box.querySelector('.save-score').addEventListener('click', window.saveCurrentAnalysis);
       } catch (_) { alert('현재 옷 사진을 분석하지 못했습니다. 다른 사진으로 다시 시도해주세요.'); }
     };
+    document.querySelector('#openCurrentCamera').onclick = async () => {
+      try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false }); const video = document.querySelector('#currentCamera'); video.srcObject = stream; await video.play(); document.querySelector('#takeCurrentPhoto').disabled = false; }
+      catch (_) { alert('카메라 권한을 허용해야 촬영할 수 있어요. 주소창 설정에서 카메라를 허용한 뒤 다시 눌러주세요.'); }
+    };
+    document.querySelector('#takeCurrentPhoto').onclick = () => { const video = document.querySelector('#currentCamera'), canvas = document.createElement('canvas'); canvas.width = video.videoWidth; canvas.height = video.videoHeight; canvas.getContext('2d').drawImage(video, 0, 0); stopCamera(); analysePhoto(canvas.toDataURL('image/jpeg', .8)); };
+    document.querySelector('#currentPhoto').onchange = async event => { if (event.target.files[0]) analysePhoto(await file64(event.target.files[0])); };
+    window.addEventListener('pagehide', stopCamera, { once: true });
   }
 }
 
@@ -145,8 +154,9 @@ function render(category = '전체') {
   const box = document.querySelector('#marketList'); if (!box) return;
   const user = window.rewearFirebase?.user?.();
   const items = marketItems.filter(item => category === '전체' || item.category === category);
-  box.innerHTML = items.length ? items.map(item => `<article class="listing"><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${item.category || '기타'} · ${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || ''}</p>${item.sellerId === user?.uid ? '<p class="notice">내가 등록한 상품입니다.</p>' : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
+  box.innerHTML = items.length ? items.map(item => `<article class="listing"><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${item.category || '기타'} · ${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || ''}</p><button class="like-toggle" data-id="${item.id}">${favorites().includes(item.id) ? '♥ 관심 상품' : '♡ 관심 상품'}</button>${item.sellerId === user?.uid ? '<p class="notice">내가 등록한 상품입니다.</p>' : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
   document.querySelectorAll('.chat-start').forEach(button => button.addEventListener('click', () => openChat(button.dataset)));
+  document.querySelectorAll('.like-toggle').forEach(button => button.onclick = () => { const ids = favorites(), id = button.dataset.id; write('rewearFavorites', ids.includes(id) ? ids.filter(value => value !== id) : [...ids, id]); render(category); });
 }
 function renderFabricMarket() {
   const box = document.querySelector('#fabricMarket'); if (!box) return;
@@ -189,3 +199,31 @@ document.querySelector('#sell')?.addEventListener('click', async () => {
 const fabric = document.querySelector('#fabricList');
 if (fabric) { const eligible = clothes().filter(item => item.score >= 60); fabric.innerHTML = eligible.length ? eligible.map(item => `<article class="listing"><h3>${item.name}</h3><p>손상·변형도 ${item.score}% · 원단 판매 가능</p></article>`).join('') : empty; }
 document.querySelector('#fabricSell')?.addEventListener('click', async () => { const garment = clothes().find(item => item.score >= 60); if (!garment) return alert('원단 판매 대상 의류가 없습니다.'); const price = +prompt(`원단 가격 (정가의 40% 이하: ${Math.floor(garment.retail * .4)}원)`, ''), desc = prompt('원단 정보 또는 상태 설명', ''); if (!price || price > garment.retail * .4) return alert('원단 가격은 정가의 40%를 넘을 수 없습니다.'); try { await window.rewearFirebase?.createListing({ ...garment, price, desc, category: '원단', kind: 'fabric' }); alert('원단 판매에 등록했습니다.'); } catch (error) { alert(error.message || '원단 등록에 실패했습니다.'); } });
+
+const myPage = document.querySelector('#myPage');
+if (myPage) {
+  let allListings = [], stopChats = null;
+  const renderMy = () => {
+    const user = window.rewearFirebase?.user?.();
+    const mine = clothes();
+    document.querySelector('#myWardrobe').innerHTML = mine.length ? mine.map(item => `<article class="listing mini"><img src="${item.photo}" alt="${item.name}"><div><b>${item.name}</b><p>${item.score == null ? '분석 전' : `손상·변형 ${item.score}%`}</p></div></article>`).join('') : '<p class="notice">저장한 옷이 없습니다.</p>';
+    const liked = allListings.filter(item => favorites().includes(item.id));
+    document.querySelector('#myLikes').innerHTML = liked.length ? liked.map(item => `<article class="listing mini"><img src="${item.photo}" alt="${item.name}"><div><b>${item.name}</b><p>${(item.price || 0).toLocaleString()}원</p></div></article>`).join('') : '<p class="notice">관심 상품이 없습니다.</p>';
+    if (!user) document.querySelector('#myChats').innerHTML = '<p class="notice">채팅을 보려면 홈에서 로그인해주세요.</p>';
+  };
+  const connectChats = () => {
+    stopChats?.();
+    const firebase = window.rewearFirebase, user = firebase?.user?.();
+    if (!user) return renderMy();
+    stopChats = firebase.subscribeConversations(conversations => {
+      document.querySelector('#myChats').innerHTML = conversations.length ? conversations.map(chat => { const other = chat.participants?.find(id => id !== user.uid) || ''; const name = chat.participantNames?.[other] || '거래 상대'; return `<button class="listing chat-list" data-id="${chat.listingId}" data-seller="${other}" data-name="${name}"><b>${name}님과의 대화</b><p>${chat.lastMessage || '새 대화를 시작하세요.'}</p></button>`; }).join('') : '<p class="notice">진행 중인 채팅이 없습니다.</p>';
+      document.querySelectorAll('.chat-list').forEach(button => button.onclick = () => openChat(button.dataset));
+    });
+  };
+  const firebase = window.rewearFirebase;
+  if (firebase?.enabled) {
+    firebase.subscribeListings(items => { allListings = items; renderMy(); });
+    firebase.onUserChange(() => { renderMy(); connectChats(); });
+  }
+  renderMy();
+}

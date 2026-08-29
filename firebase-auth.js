@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, doc, writeBatch } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 import { getStorage, ref, uploadString, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js';
 
 const config = window.REWEAR_CONFIG?.firebase;
@@ -12,6 +12,7 @@ const notify = () => listeners.forEach(listener => listener(currentUser));
 if (usable) {
   const app = getApps()[0] || initializeApp(config);
   auth = getAuth(app); db = getFirestore(app); storage = getStorage(app);
+  setPersistence(auth, browserLocalPersistence).catch(() => {});
   onAuthStateChanged(auth, user => { currentUser = user; notify(); });
 }
 
@@ -74,12 +75,21 @@ window.rewearFirebase = {
     if (!text.trim()) return;
     const memberIds = [user.uid, sellerId].sort();
     const roomId = `${listingId}_${memberIds.join('_')}`;
-    await addDoc(collection(db, 'chats', roomId, 'messages'), { text: text.trim(), senderId: user.uid, senderName: user.displayName || '사용자', createdAt: serverTimestamp() });
+    const batch = writeBatch(db);
+    const members = [user.uid, sellerId].sort();
+    const conversation = doc(db, 'conversations', roomId);
+    batch.set(conversation, { listingId, sellerId, participants: members, participantNames: { [user.uid]: user.displayName || '사용자', [sellerId]: sellerId === user.uid ? (user.displayName || '사용자') : '판매자' }, updatedAt: serverTimestamp(), lastMessage: text.trim() }, { merge: true });
+    batch.set(doc(collection(db, 'chats', roomId, 'messages')), { text: text.trim(), senderId: user.uid, senderName: user.displayName || '사용자', createdAt: serverTimestamp() });
+    await batch.commit();
     return roomId;
   },
   subscribeMessages(roomId, callback) {
     if (!usable) return () => callback([]);
     return onSnapshot(query(collection(db, 'chats', roomId, 'messages'), orderBy('createdAt', 'asc')), snapshot => callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+  },
+  subscribeConversations(callback) {
+    if (!usable || !currentUser) return () => callback([]);
+    return onSnapshot(query(collection(db, 'conversations'), where('participants', 'array-contains', currentUser.uid)), snapshot => callback(snapshot.docs.map(entry => ({ id: entry.id, ...entry.data() })).sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))));
   }
 };
 window.dispatchEvent(new Event('rewearFirebaseReady'));

@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, doc, writeBatch, setDoc } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, doc, writeBatch, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 import { getStorage, ref, uploadString, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js';
 
 const config = window.REWEAR_CONFIG?.firebase;
@@ -74,6 +74,12 @@ window.rewearFirebase = {
     }
     const doc = await addDoc(collection(db, 'listings'), { ...listing, photo: photoUrl, sellerId: user.uid, sellerName: user.displayName || 'RE:WEAR 사용자', createdAt: serverTimestamp() });
     return doc.id;
+  },
+  async deleteListing(listingId) {
+    const user = requireUser();
+    // Firestore 규칙에서도 sellerId가 같은 사람만 삭제할 수 있도록 한 번 더 검증한다.
+    await deleteDoc(doc(db, 'listings', listingId));
+    return user.uid;
   },
   subscribeListings(callback) {
     if (!usable) return () => callback([]);

@@ -174,16 +174,27 @@ function render(category = '전체') {
   const box = document.querySelector('#marketList'); if (!box) return;
   const user = window.rewearFirebase?.user?.();
   const items = marketItems.filter(item => category === '전체' || item.category === category);
-  box.innerHTML = items.length ? items.map(item => `<article class="listing"><button class="heart-button like-toggle" aria-label="관심 상품" data-id="${item.id}">${favorites().some(id => sameId(id, item.id)) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${item.category || '기타'} · ${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || ''}</p>${item.sellerId === user?.uid ? '<p class="notice">내가 등록한 상품입니다.</p>' : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
+  box.innerHTML = items.length ? items.map(item => `<article class="listing"><button class="heart-button like-toggle" aria-label="관심 상품" data-id="${item.id}">${favorites().some(id => sameId(id, item.id)) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${item.category || '기타'} · ${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || ''}</p>${item.sellerId === user?.uid ? `<p class="notice">내가 등록한 상품입니다.</p><button class="outline-button listing-delete" data-id="${item.id}" type="button">내 판매글 삭제</button>` : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
   document.querySelectorAll('.chat-start').forEach(button => button.addEventListener('click', () => openChat(button.dataset)));
   document.querySelectorAll('.like-toggle').forEach(button => button.onclick = () => { const item = marketItems.find(entry => sameId(entry.id, button.dataset.id)); if (item) toggleFavorite(item); render(category); });
+  document.querySelectorAll('.listing-delete').forEach(button => button.onclick = () => deleteListing(button.dataset.id));
 }
 function renderFabricMarket() {
   const box = document.querySelector('#fabricMarket'); if (!box) return;
   const user = window.rewearFirebase?.user?.();
-  box.innerHTML = fabricItems.length ? fabricItems.map(item => `<article class="listing"><button class="heart-button fabric-like" aria-label="관심 상품" data-id="${item.id}">${favorites().some(id => sameId(id, item.id)) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || '원단 판매 상품'}</p>${item.sellerId === user?.uid ? '<p class="notice">내가 등록한 원단입니다.</p>' : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
+  box.innerHTML = fabricItems.length ? fabricItems.map(item => `<article class="listing"><button class="heart-button fabric-like" aria-label="관심 상품" data-id="${item.id}">${favorites().some(id => sameId(id, item.id)) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || '원단 판매 상품'}</p>${item.sellerId === user?.uid ? `<p class="notice">내가 등록한 원단입니다.</p><button class="outline-button listing-delete" data-id="${item.id}" type="button">내 판매글 삭제</button>` : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
   document.querySelectorAll('.chat-start').forEach(button => button.addEventListener('click', () => openChat(button.dataset)));
   document.querySelectorAll('.fabric-like').forEach(button => button.onclick = () => { const item = fabricItems.find(entry => sameId(entry.id, button.dataset.id)); if (item) toggleFavorite(item); renderFabricMarket(); });
+  document.querySelectorAll('.listing-delete').forEach(button => button.onclick = () => deleteListing(button.dataset.id));
+}
+async function deleteListing(id) {
+  if (!confirm('이 판매글을 삭제할까요? 삭제 후에는 상품 목록에서 바로 사라집니다.')) return;
+  try {
+    await window.rewearFirebase?.deleteListing(id);
+    const cached = favoriteItems().filter(item => !sameId(item.id, id));
+    write('rewearFavoriteItems', cached);
+    write('rewearFavorites', favorites().filter(favorite => !sameId(favorite, id)));
+  } catch (error) { alert(error.message || '판매글을 삭제하지 못했습니다.'); }
 }
 function openChat(data) {
   const firebase = window.rewearFirebase;
@@ -217,8 +228,18 @@ function attachMarketFirebase() {
 window.addEventListener('rewearFirebaseReady', attachMarketFirebase, { once: true });
 if (window.rewearFirebase) attachMarketFirebase();
 document.querySelectorAll('#categories button').forEach(button => button.onclick = () => { document.querySelectorAll('#categories button').forEach(x => x.classList.remove('active')); button.classList.add('active'); render(button.dataset.c); });
+const chooseGarment = (items, title) => new Promise(resolve => {
+  if (!items.length) return resolve(null);
+  const modal = document.createElement('section');
+  modal.className = 'chat-modal';
+  modal.innerHTML = `<div class="chat-card"><button class="chat-close" type="button">×</button><p class="eyebrow"><span></span> SELECT ITEM</p><h2>${title}</h2><p>등록할 옷을 선택하세요.</p><div class="garment-choices">${items.map(item => `<button class="listing garment-choice" data-id="${item.id}" type="button"><img class="thumb" src="${item.photo}" alt="${item.name}"><b>${item.name}</b><p>정가 ${item.retail.toLocaleString()}원 · 손상·변형 ${item.score}%</p></button>`).join('')}</div></div>`;
+  const finish = value => { modal.remove(); resolve(value); };
+  modal.querySelector('.chat-close').onclick = () => finish(null);
+  modal.querySelectorAll('.garment-choice').forEach(button => button.onclick = () => finish(items.find(item => sameId(item.id, button.dataset.id))));
+  document.body.append(modal);
+});
 document.querySelector('#sell')?.addEventListener('click', async () => {
-  const garment = clothes().find(item => item.score < 60);
+  const garment = await chooseGarment(clothes().filter(item => item.score < 60), '중고 거래에 등록할 옷');
   if (!garment) return alert('손상·변형도 60% 미만으로 분석된 옷이 없습니다.');
   const price = +prompt(`${garment.name} 가격 (정가의 90% 이하: ${Math.floor(garment.retail * .9)}원)`, ''), desc = prompt('상품 설명', '');
   if (!price || price > garment.retail * .9) return alert('정가의 90%를 넘을 수 없습니다.');
@@ -227,7 +248,7 @@ document.querySelector('#sell')?.addEventListener('click', async () => {
 });
 const fabric = document.querySelector('#fabricList');
 if (fabric) { const eligible = clothes().filter(item => item.score >= 60); fabric.innerHTML = eligible.length ? eligible.map(item => `<article class="listing"><h3>${item.name}</h3><p>손상·변형도 ${item.score}% · 원단 판매 가능</p></article>`).join('') : empty; }
-document.querySelector('#fabricSell')?.addEventListener('click', async () => { const garment = clothes().find(item => item.score >= 60); if (!garment) return alert('원단 판매 대상 의류가 없습니다.'); const price = +prompt(`원단 가격 (정가의 40% 이하: ${Math.floor(garment.retail * .4)}원)`, ''), desc = prompt('원단 정보 또는 상태 설명', ''); if (!price || price > garment.retail * .4) return alert('원단 가격은 정가의 40%를 넘을 수 없습니다.'); try { await window.rewearFirebase?.createListing({ ...garment, price, desc, category: '원단', kind: 'fabric' }); alert('원단 판매에 등록했습니다.'); } catch (error) { alert(error.message || '원단 등록에 실패했습니다.'); } });
+document.querySelector('#fabricSell')?.addEventListener('click', async () => { const garment = await chooseGarment(clothes().filter(item => item.score >= 60), '원단으로 판매할 옷'); if (!garment) return alert('원단 판매 대상 의류가 없습니다.'); const price = +prompt(`원단 가격 (정가의 40% 이하: ${Math.floor(garment.retail * .4)}원)`, ''), desc = prompt('원단 정보 또는 상태 설명', ''); if (!price || price > garment.retail * .4) return alert('원단 가격은 정가의 40%를 넘을 수 없습니다.'); try { await window.rewearFirebase?.createListing({ ...garment, price, desc, category: '원단', kind: 'fabric' }); alert('원단 판매에 등록했습니다.'); } catch (error) { alert(error.message || '원단 등록에 실패했습니다.'); } });
 
 const myPage = document.querySelector('#myPage');
 if (myPage) {

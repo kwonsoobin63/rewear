@@ -91,7 +91,13 @@ document.addEventListener('click', async event => {
   const status = document.querySelector('[data-login-status]');
   const form = document.querySelector('[data-email-form]');
   if (emailOpen) {
-    form?.classList.toggle('hidden');
+    const signup = emailOpen.dataset.emailOpen === 'signup';
+    form?.classList.remove('hidden');
+    if (form) form.dataset.mode = signup ? 'signup' : 'login';
+    const title = form?.querySelector('[data-email-form-title]');
+    const submit = form?.querySelector('[data-email-submit]');
+    if (title) title.textContent = signup ? '이메일 회원가입' : '이메일 로그인';
+    if (submit) submit.textContent = signup ? '회원가입' : '이메일 로그인';
     return;
   }
   try {
@@ -108,7 +114,7 @@ document.addEventListener('submit', async event => {
   const status = document.querySelector('[data-login-status]');
   const email = form.querySelector('[name=email]').value.trim();
   const password = form.querySelector('[name=password]').value;
-  const signup = event.submitter?.matches('[data-email-signup]');
+  const signup = form.dataset.mode === 'signup';
   try {
     if (status) status.textContent = signup ? '회원가입 중…' : '로그인 중…';
     await (signup ? window.rewearFirebase.emailSignup(email, password) : window.rewearFirebase.emailLogin(email, password));

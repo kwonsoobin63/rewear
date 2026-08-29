@@ -2,14 +2,15 @@
 
 ## 1. Google 로그인
 
-현재 웹에는 Google Identity Services(GIS) 공식 버튼을 렌더링하는 연결 지점이 포함되어 있습니다.
+현재 웹에는 Firebase Authentication을 이용한 Google 로그인 연결 지점이 포함되어 있습니다.
 
-1. Google Cloud Console에서 OAuth 동의 화면을 설정하고, **웹 애플리케이션** 유형의 OAuth 클라이언트 ID를 만듭니다.
-2. Authorized JavaScript origins에 GitHub Pages 주소를 정확히 추가합니다. 예: `https://계정명.github.io`.
-3. 발급된 클라이언트 ID를 `config.js`의 `googleClientId`에 넣고 배포합니다.
-4. 운영에서는 GIS가 브라우저에 돌려주는 ID 토큰(JWT)을 반드시 서버에서 검증하고, 서버 세션 또는 안전한 토큰을 발급합니다.
+1. [Firebase Console](https://console.firebase.google.com/)에서 프로젝트를 만듭니다.
+2. 프로젝트 설정에서 웹 앱을 추가하고 제공되는 `firebaseConfig` 값을 복사합니다.
+3. Firebase Authentication → Sign-in method에서 **Google**을 활성화합니다.
+4. Authentication → Settings → Authorized domains에 `kwonsoobin63.github.io`를 추가합니다.
+5. `config.js`의 `firebase` 항목에 `apiKey`, `authDomain`, `projectId`, `appId`를 넣고 다시 배포합니다.
 
-`config.js`의 클라이언트 ID는 비밀값이 아니지만, **클라이언트 secret은 정적 웹이나 GitHub에 절대 올리면 안 됩니다.** 이메일 입력으로 계속하기는 현재 시제품의 로컬 브라우저 세션이며 실제 인증이 아닙니다. 실제 계정·포인트·거래를 운영하려면 Firebase Authentication, Supabase Auth, Auth0 또는 자체 백엔드 중 하나를 연결해야 합니다.
+Firebase 웹 설정값은 공개 가능한 식별자이지만, **서비스 계정 키·클라이언트 secret은 GitHub에 절대 올리면 안 됩니다.** 이메일 입력으로 계속하기는 현재 시제품의 로컬 브라우저 세션이며 실제 인증이 아닙니다.
 
 ## 2. 무아레 기반 의류 분석
 

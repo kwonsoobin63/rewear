@@ -5,6 +5,10 @@ window.REWEAR_CONFIG = {
     apiKey: "",
     authDomain: "",
     projectId: "",
-    appId: ""
+    appId: "",
+    storageBucket: "",
+    // Firebase Cloud Functions로 배포한 네이버 OAuth 콜백 주소를 입력합니다.
+    // 예: https://asia-northeast3-내프로젝트.cloudfunctions.net/naverLogin
+    naverAuthEndpoint: ""
   }
 };

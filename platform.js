@@ -74,6 +74,23 @@ if (album) {
 }
 
 let pendingAnalysis = null;
+const makeOutline = source => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.onload = () => {
+    const size = 420, scale = Math.min(1, size / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas'), context = canvas.getContext('2d', { willReadFrequently: true });
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale)); canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height), out = context.createImageData(canvas.width, canvas.height);
+    for (let y = 1; y < canvas.height - 1; y++) for (let x = 1; x < canvas.width - 1; x++) {
+      const i = (y * canvas.width + x) * 4, left = i - 4, right = i + 4, up = i - canvas.width * 4, down = i + canvas.width * 4;
+      const edge = Math.abs(pixels.data[right] - pixels.data[left]) + Math.abs(pixels.data[down] - pixels.data[up]);
+      if (edge > 110 && (x + y) % 10 < 5) { out.data[i] = 51; out.data[i + 1] = 125; out.data[i + 2] = 78; out.data[i + 3] = 230; }
+    }
+    context.putImageData(out, 0, 0); resolve(canvas.toDataURL('image/png'));
+  };
+  image.onerror = reject; image.src = source;
+});
 const estimateCondition = (baseline, current) => {
   // 동일한 크기의 회색조 미리보기 간 평균 밝기 차이. 진짜 위상 무아레 측정값이 아니라 시제품 비교 지표다.
   const size = 48, canvas = document.createElement('canvas'), ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -90,7 +107,8 @@ if (analysis) {
   const garment = clothes().find(item => String(item.id) === new URLSearchParams(location.search).get('id'));
   if (!garment) analysis.innerHTML = empty;
   else {
-    analysis.innerHTML = `<article class="listing"><img src="${garment.photo}" class="thumb" alt="${garment.name}"><h3>${garment.name}</h3><p>새 옷 기준 사진</p><label class="primary upload-now">현재 옷 촬영하기<input id="currentPhoto" type="file" accept="image/*" capture="environment"></label><div id="score"></div></article>`;
+    analysis.innerHTML = `<article class="listing"><h3>${garment.name}</h3><p>아래 점선 윤곽에 옷의 위치·크기를 맞춘 뒤 현재 사진을 촬영하세요.</p><div class="alignment-guide"><img id="outlineGuide" alt="새 옷 사진에서 추출한 점선 윤곽"><span>BASELINE OUTLINE</span></div><label class="primary upload-now">현재 옷 촬영하기<input id="currentPhoto" type="file" accept="image/*" capture="environment"></label><div id="score"></div></article>`;
+    makeOutline(garment.photo).then(outline => { const guide = document.querySelector('#outlineGuide'); if (guide) guide.src = outline; }).catch(() => {});
     document.querySelector('#currentPhoto').onchange = async event => {
       try {
         const now = await file64(event.target.files[0]);
@@ -121,21 +139,53 @@ window.saveCurrentAnalysis = () => {
   setTimeout(() => location.assign(target), 250);
 };
 
+let marketItems = [], fabricItems = [];
 function list(type) { return read(type); }
 function render(category = '전체') {
   const box = document.querySelector('#marketList'); if (!box) return;
-  const items = list('rewearMarket').filter(item => category === '전체' || item.category === category);
-  box.innerHTML = items.length ? items.map(item => `<article class="listing"><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.mine ? '· 내 판매물품' : ''}</h3><p>${item.category} · ${item.price.toLocaleString()}원 · 손상·변형 ${item.score}%</p><p>${item.desc}</p><button class="primary">관심 누르기</button> <button class="outline">장바구니</button></article>`).join('') : empty;
+  const user = window.rewearFirebase?.user?.();
+  const items = marketItems.filter(item => category === '전체' || item.category === category);
+  box.innerHTML = items.length ? items.map(item => `<article class="listing"><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${item.category || '기타'} · ${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || ''}</p>${item.sellerId === user?.uid ? '<p class="notice">내가 등록한 상품입니다.</p>' : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
+  document.querySelectorAll('.chat-start').forEach(button => button.addEventListener('click', () => openChat(button.dataset)));
 }
-render();
+function renderFabricMarket() {
+  const box = document.querySelector('#fabricMarket'); if (!box) return;
+  const user = window.rewearFirebase?.user?.();
+  box.innerHTML = fabricItems.length ? fabricItems.map(item => `<article class="listing"><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || '원단 판매 상품'}</p>${item.sellerId === user?.uid ? '<p class="notice">내가 등록한 원단입니다.</p>' : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
+  document.querySelectorAll('.chat-start').forEach(button => button.addEventListener('click', () => openChat(button.dataset)));
+}
+function openChat(data) {
+  const firebase = window.rewearFirebase;
+  if (!firebase?.enabled) return alert('실시간 채팅은 Firebase 설정 후 사용할 수 있습니다.');
+  const user = firebase.user();
+  if (!user) return alert('판매자와 채팅하려면 홈에서 먼저 로그인해주세요.');
+  const memberIds = [user.uid, data.seller].sort(), roomId = `${data.id}_${memberIds.join('_')}`;
+  document.querySelector('#chatModal')?.remove();
+  const modal = document.createElement('section');
+  modal.id = 'chatModal'; modal.className = 'chat-modal';
+  modal.innerHTML = `<div class="chat-card"><button class="chat-close" type="button">×</button><p class="eyebrow"><span></span> CHAT</p><h2>${data.name}님과 대화</h2><div class="messages"></div><form class="chat-form"><input required maxlength="500" placeholder="메시지를 입력하세요"><button class="primary">보내기</button></form></div>`;
+  document.body.append(modal);
+  modal.querySelector('.chat-close').onclick = () => { unsubscribe?.(); modal.remove(); };
+  let unsubscribe = firebase.subscribeMessages(roomId, messages => { const box = modal.querySelector('.messages'); box.innerHTML = messages.map(message => `<p class="${message.senderId === user.uid ? 'mine' : ''}">${message.text}</p>`).join(''); box.scrollTop = box.scrollHeight; });
+  modal.querySelector('.chat-form').onsubmit = async event => { event.preventDefault(); const input = event.currentTarget.querySelector('input'); try { await firebase.sendMessage({ listingId: data.id, sellerId: data.seller, text: input.value }); input.value = ''; } catch (error) { alert(error.message); } };
+}
+function attachMarketFirebase() {
+  const firebase = window.rewearFirebase;
+  if (!firebase?.enabled) { marketItems = list('rewearMarket'); render(); renderFabricMarket(); return; }
+  firebase.subscribeListings(items => { marketItems = items.filter(item => item.kind !== 'fabric'); fabricItems = items.filter(item => item.kind === 'fabric'); render(); renderFabricMarket(); });
+  firebase.onUserChange(() => { render(); renderFabricMarket(); });
+}
+window.addEventListener('rewearFirebaseReady', attachMarketFirebase, { once: true });
+if (window.rewearFirebase) attachMarketFirebase();
 document.querySelectorAll('#categories button').forEach(button => button.onclick = () => { document.querySelectorAll('#categories button').forEach(x => x.classList.remove('active')); button.classList.add('active'); render(button.dataset.c); });
-document.querySelector('#sell')?.addEventListener('click', () => {
+document.querySelector('#sell')?.addEventListener('click', async () => {
   const garment = clothes().find(item => item.score < 60);
   if (!garment) return alert('손상·변형도 60% 미만으로 분석된 옷이 없습니다.');
   const price = +prompt(`${garment.name} 가격 (정가의 90% 이하: ${Math.floor(garment.retail * .9)}원)`, ''), desc = prompt('상품 설명', '');
   if (!price || price > garment.retail * .9) return alert('정가의 90%를 넘을 수 없습니다.');
-  write('rewearMarket', [...list('rewearMarket'), { ...garment, price, desc, category: '상의', mine: true }]); location.reload();
+  try { await window.rewearFirebase?.createListing({ ...garment, price, desc, category: '상의' }); alert('중고 거래에 등록했습니다.'); }
+  catch (error) { alert(error.message || '상품 등록에 실패했습니다.'); }
 });
 const fabric = document.querySelector('#fabricList');
 if (fabric) { const eligible = clothes().filter(item => item.score >= 60); fabric.innerHTML = eligible.length ? eligible.map(item => `<article class="listing"><h3>${item.name}</h3><p>손상·변형도 ${item.score}% · 원단 판매 가능</p></article>`).join('') : empty; }
-document.querySelector('#fabricSell')?.addEventListener('click', () => { const garment = clothes().find(item => item.score >= 60); if (!garment) return alert('원단 판매 대상 의류가 없습니다.'); const price = +prompt(`원단 가격 (정가의 40% 이하: ${Math.floor(garment.retail * .4)}원)`, ''); if (!price || price > garment.retail * .4) return alert('정가의 40%를 넘을 수 없습니다.'); alert('원단 정보와 가격이 등록되었습니다.'); });
+document.querySelector('#fabricSell')?.addEventListener('click', async () => { const garment = clothes().find(item => item.score >= 60); if (!garment) return alert('원단 판매 대상 의류가 없습니다.'); const price = +prompt(`원단 가격 (정가의 40% 이하: ${Math.floor(garment.retail * .4)}원)`, ''), desc = prompt('원단 정보 또는 상태 설명', ''); if (!price || price > garment.retail * .4) return alert('원단 가격은 정가의 40%를 넘을 수 없습니다.'); try { await window.rewearFirebase?.createListing({ ...garment, price, desc, category: '원단', kind: 'fabric' }); alert('원단 판매에 등록했습니다.'); } catch (error) { alert(error.message || '원단 등록에 실패했습니다.'); } });

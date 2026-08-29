@@ -8,11 +8,19 @@
 2. 프로젝트 설정에서 웹 앱을 추가하고 제공되는 `firebaseConfig` 값을 복사합니다.
 3. Firebase Authentication → Sign-in method에서 **Google**을 활성화합니다.
 4. Authentication → Settings → Authorized domains에 `kwonsoobin63.github.io`를 추가합니다.
-5. `config.js`의 `firebase` 항목에 `apiKey`, `authDomain`, `projectId`, `appId`를 넣고 다시 배포합니다.
+5. Firebase Storage를 만들고 `config.js`의 `firebase` 항목에 `apiKey`, `authDomain`, `projectId`, `appId`, `storageBucket`을 넣고 다시 배포합니다.
 
 Firebase 웹 설정값은 공개 가능한 식별자이지만, **서비스 계정 키·클라이언트 secret은 GitHub에 절대 올리면 안 됩니다.** 이메일 입력으로 계속하기는 현재 시제품의 로컬 브라우저 세션이며 실제 인증이 아닙니다.
 
-## 2. 무아레 기반 의류 분석
+## 2. 실시간 판매글·채팅
+
+중고 거래와 원단 판매글은 Firestore `listings` 컬렉션에, 채팅은 `chats/{상품ID_구매자ID_판매자ID}/messages`에 저장하도록 연결했습니다. Firebase Console에서 **Cloud Firestore**와 **Storage**를 만든 뒤 테스트 모드가 끝나기 전에 로그인 사용자만 접근하는 보안 규칙을 설정해야 합니다. 판매자와 구매자 외에 다른 사람이 채팅방을 읽을 수 없도록 하는 규칙은 실제 배포 전에 반드시 추가하세요.
+
+## 3. 네이버 로그인
+
+Google은 Firebase Authentication에서 바로 지원합니다. 반면 네이버는 Firebase의 기본 제공 로그인 제공자가 아니므로, 네이버 개발자센터의 Client ID/Client Secret과 Firebase Cloud Functions가 필요합니다. Client Secret을 `config.js`나 GitHub에 넣으면 안 됩니다. Cloud Function이 네이버 OAuth 코드를 교환하고 Firebase Custom Token을 발급한 뒤, 그 함수 주소를 `naverAuthEndpoint`에 넣는 방식으로 연결해야 합니다. 현재 네이버 버튼은 이 안전한 연결 주소가 입력되기 전에는 명확한 안내를 표시합니다.
+
+## 4. 무아레 기반 의류 분석
 
 ### 이 HTML만으로 가능한 것
 

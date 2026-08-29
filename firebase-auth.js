@@ -8,12 +8,19 @@ const usable = Boolean(config?.apiKey && config?.authDomain && config?.projectId
 let auth, db, storage, currentUser = null;
 const listeners = new Set();
 const notify = () => listeners.forEach(listener => listener(currentUser));
+function updateAuthUi(user) {
+  const status = document.querySelector('[data-login-status]');
+  if (status) status.textContent = user ? `${user.displayName || user.email || '사용자'}님으로 로그인되어 있어요.` : '아직 로그인하지 않았어요.';
+  document.querySelectorAll('[data-login-google], [data-email-open]').forEach(button => { button.hidden = Boolean(user); });
+  const emailForm = document.querySelector('[data-email-form]');
+  if (user) emailForm?.classList.add('hidden');
+}
 
 if (usable) {
   const app = getApps()[0] || initializeApp(config);
   auth = getAuth(app); db = getFirestore(app); storage = getStorage(app);
   setPersistence(auth, browserLocalPersistence).catch(() => {});
-  onAuthStateChanged(auth, user => { currentUser = user; notify(); });
+  onAuthStateChanged(auth, user => { currentUser = user; updateAuthUi(user); notify(); });
 }
 
 const requireUser = () => {

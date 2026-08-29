@@ -79,7 +79,7 @@ window.rewearFirebase = {
     if (!usable) return () => callback([]);
     return onSnapshot(query(collection(db, 'listings'), orderBy('createdAt', 'desc')), snapshot => callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
   },
-  async sendMessage({ listingId, sellerId, text }) {
+  async sendMessage({ listingId, sellerId, sellerName = '판매자', text }) {
     const user = requireUser();
     if (!text.trim()) return;
     const memberIds = [user.uid, sellerId].sort();
@@ -87,7 +87,7 @@ window.rewearFirebase = {
     const batch = writeBatch(db);
     const members = [user.uid, sellerId].sort();
     const conversation = doc(db, 'conversations', roomId);
-    batch.set(conversation, { listingId, sellerId, participants: members, participantNames: { [user.uid]: user.displayName || '사용자', [sellerId]: sellerId === user.uid ? (user.displayName || '사용자') : '판매자' }, updatedAt: serverTimestamp(), lastMessage: text.trim() }, { merge: true });
+    batch.set(conversation, { listingId, sellerId, participants: members, participantNames: { [user.uid]: user.displayName || '사용자', [sellerId]: sellerId === user.uid ? (user.displayName || '사용자') : sellerName }, updatedAt: serverTimestamp(), lastMessage: text.trim() }, { merge: true });
     batch.set(doc(collection(db, 'chats', roomId, 'messages')), { text: text.trim(), senderId: user.uid, senderName: user.displayName || '사용자', createdAt: serverTimestamp() });
     await batch.commit();
     return roomId;
@@ -96,9 +96,9 @@ window.rewearFirebase = {
     if (!usable) return () => callback([]);
     return onSnapshot(query(collection(db, 'chats', roomId, 'messages'), orderBy('createdAt', 'asc')), snapshot => callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
   },
-  subscribeConversations(callback) {
+  subscribeConversations(callback, onError = () => {}) {
     if (!usable || !currentUser) return () => callback([]);
-    return onSnapshot(query(collection(db, 'conversations'), where('participants', 'array-contains', currentUser.uid)), snapshot => callback(snapshot.docs.map(entry => ({ id: entry.id, ...entry.data() })).sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))));
+    return onSnapshot(query(collection(db, 'conversations'), where('participants', 'array-contains', currentUser.uid)), snapshot => callback(snapshot.docs.map(entry => ({ id: entry.id, ...entry.data() })).sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))), onError);
   }
 };
 window.dispatchEvent(new Event('rewearFirebaseReady'));

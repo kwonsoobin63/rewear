@@ -184,7 +184,7 @@ function openChat(data) {
   document.body.append(modal);
   modal.querySelector('.chat-close').onclick = () => { unsubscribe?.(); modal.remove(); };
   let unsubscribe = firebase.subscribeMessages(roomId, messages => { const box = modal.querySelector('.messages'); box.innerHTML = messages.map(message => `<p class="${message.senderId === user.uid ? 'mine' : ''}">${message.text}</p>`).join(''); box.scrollTop = box.scrollHeight; });
-  modal.querySelector('.chat-form').onsubmit = async event => { event.preventDefault(); const input = event.currentTarget.querySelector('input'); try { await firebase.sendMessage({ listingId: data.id, sellerId: data.seller, text: input.value }); input.value = ''; } catch (error) { alert(error.message); } };
+  modal.querySelector('.chat-form').onsubmit = async event => { event.preventDefault(); const input = event.currentTarget.querySelector('input'); try { await firebase.sendMessage({ listingId: data.id, sellerId: data.seller, sellerName: data.name, text: input.value }); input.value = ''; } catch (error) { alert(error.message); } };
 }
 function attachMarketFirebase() {
   const firebase = window.rewearFirebase;
@@ -225,7 +225,7 @@ if (myPage) {
     stopChats = firebase.subscribeConversations(conversations => {
       document.querySelector('#myChats').innerHTML = conversations.length ? conversations.map(chat => { const other = chat.participants?.find(id => id !== user.uid) || ''; const name = chat.participantNames?.[other] || '거래 상대'; return `<button class="listing chat-list" data-id="${chat.listingId}" data-seller="${other}" data-name="${name}"><b>${name}님과의 대화</b><p>${chat.lastMessage || '새 대화를 시작하세요.'}</p></button>`; }).join('') : '<p class="notice">진행 중인 채팅이 없습니다.</p>';
       document.querySelectorAll('.chat-list').forEach(button => button.onclick = () => openChat(button.dataset));
-    });
+    }, () => { document.querySelector('#myChats').innerHTML = '<p class="notice">채팅 목록을 불러오지 못했습니다. 로그인 상태를 확인한 뒤 새로고침해주세요.</p>'; });
   };
   const connectMyFirebase = () => {
     const firebase = window.rewearFirebase;

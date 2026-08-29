@@ -86,7 +86,8 @@ window.rewearFirebase = {
     const roomId = `${listingId}_${memberIds.join('_')}`;
     const batch = writeBatch(db);
     const members = [user.uid, sellerId].sort();
-    const conversation = doc(db, 'conversations', roomId);
+    // 채팅방 자체를 문서로 만들어야 구매자·판매자 모두 목록에서 찾을 수 있다.
+    const conversation = doc(db, 'chats', roomId);
     batch.set(conversation, { listingId, sellerId, participants: members, participantNames: { [user.uid]: user.displayName || '사용자', [sellerId]: sellerId === user.uid ? (user.displayName || '사용자') : sellerName }, updatedAt: serverTimestamp(), lastMessage: text.trim() }, { merge: true });
     batch.set(doc(collection(db, 'chats', roomId, 'messages')), { text: text.trim(), senderId: user.uid, senderName: user.displayName || '사용자', createdAt: serverTimestamp() });
     await batch.commit();
@@ -98,7 +99,7 @@ window.rewearFirebase = {
   },
   subscribeConversations(callback, onError = () => {}) {
     if (!usable || !currentUser) return () => callback([]);
-    return onSnapshot(query(collection(db, 'conversations'), where('participants', 'array-contains', currentUser.uid)), snapshot => callback(snapshot.docs.map(entry => ({ id: entry.id, ...entry.data() })).sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))), onError);
+    return onSnapshot(query(collection(db, 'chats'), where('participants', 'array-contains', currentUser.uid)), snapshot => callback(snapshot.docs.map(entry => ({ id: entry.id, ...entry.data() })).sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0))), onError);
   }
 };
 window.dispatchEvent(new Event('rewearFirebaseReady'));

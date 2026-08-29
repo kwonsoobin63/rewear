@@ -4,6 +4,12 @@ const read = key => {
   catch (_) { return []; }
 };
 const write = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+const tabbar = document.querySelector('.tabbar');
+if (tabbar && !tabbar.querySelector('[href="profile.html"]')) {
+  const myTab = document.createElement('a');
+  myTab.className = 'tab'; myTab.href = 'profile.html'; myTab.innerHTML = '<b>◯</b><span>MY</span>';
+  tabbar.append(myTab);
+}
 const clothes = () => read('rewearClothes');
 const favorites = () => read('rewearFavorites');
 const empty = '<div class="empty"><h2>아직 등록된 옷이 없어요.</h2><p>새 옷을 촬영해 옷 앨범에 보관해보세요.</p></div>';
@@ -220,10 +226,13 @@ if (myPage) {
       document.querySelectorAll('.chat-list').forEach(button => button.onclick = () => openChat(button.dataset));
     });
   };
-  const firebase = window.rewearFirebase;
-  if (firebase?.enabled) {
+  const connectMyFirebase = () => {
+    const firebase = window.rewearFirebase;
+    if (!firebase?.enabled) return;
     firebase.subscribeListings(items => { allListings = items; renderMy(); });
     firebase.onUserChange(() => { renderMy(); connectChats(); });
-  }
+  };
+  connectMyFirebase();
+  window.addEventListener('rewearFirebaseReady', connectMyFirebase, { once: true });
   renderMy();
 }

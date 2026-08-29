@@ -94,6 +94,13 @@ window.rewearFirebase = {
 };
 window.dispatchEvent(new Event('rewearFirebaseReady'));
 
+const authTabbar = document.querySelector('.tabbar');
+if (authTabbar && !authTabbar.querySelector('[href="profile.html"]')) {
+  const myTab = document.createElement('a');
+  myTab.className = 'tab'; myTab.href = 'profile.html'; myTab.innerHTML = '<b>◯</b><span>MY</span>';
+  authTabbar.append(myTab);
+}
+
 document.addEventListener('click', async event => {
   const google = event.target.closest('[data-login-google]');
   const emailOpen = event.target.closest('[data-email-open]');

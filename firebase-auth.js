@@ -20,6 +20,19 @@ const requireUser = () => {
   if (!currentUser) throw new Error('판매·채팅을 하려면 먼저 로그인해주세요.');
   return currentUser;
 };
+const listingPreview = source => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.onload = () => {
+    const max = 420, scale = Math.min(1, max / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    resolve(canvas.toDataURL('image/jpeg', .55));
+  };
+  image.onerror = () => reject(new Error('판매 사진을 처리하지 못했습니다.'));
+  image.src = source;
+});
 
 window.rewearFirebase = {
   enabled: usable,
@@ -38,10 +51,14 @@ window.rewearFirebase = {
   },
   async createListing(listing) {
     const user = requireUser();
-    if (!config.storageBucket) throw new Error('사진을 공유하려면 config.js의 storageBucket을 입력해주세요.');
-    const imageRef = ref(storage, `listings/${user.uid}/${Date.now()}.jpg`);
-    await uploadString(imageRef, listing.photo, 'data_url');
-    const photoUrl = await getDownloadURL(imageRef);
+    // Spark 요금제에서도 작동하도록 작은 썸네일은 Firestore에 직접 저장한다.
+    // useStorage를 켜면 원본급 사진은 Storage URL로 대체한다.
+    let photoUrl = await listingPreview(listing.photo);
+    if (config.useStorage && config.storageBucket) {
+      const imageRef = ref(storage, `listings/${user.uid}/${Date.now()}.jpg`);
+      await uploadString(imageRef, listing.photo, 'data_url');
+      photoUrl = await getDownloadURL(imageRef);
+    }
     const doc = await addDoc(collection(db, 'listings'), { ...listing, photo: photoUrl, sellerId: user.uid, sellerName: user.displayName || 'RE:WEAR 사용자', createdAt: serverTimestamp() });
     return doc.id;
   },

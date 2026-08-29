@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 import { getStorage, ref, uploadString, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js';
 
@@ -44,10 +44,13 @@ window.rewearFirebase = {
     provider.setCustomParameters({ prompt: 'select_account' });
     return (await signInWithPopup(auth, provider)).user;
   },
-  async naverLogin() {
-    if (!config?.naverAuthEndpoint) throw new Error('네이버 로그인에는 Firebase Cloud Functions의 네이버 OAuth 주소가 필요합니다. config.js의 naverAuthEndpoint를 입력해주세요.');
-    // 네이버 client secret은 웹에 두면 안 됩니다. Cloud Function에서 OAuth 교환 후 Firebase Custom Token을 발급해야 합니다.
-    location.assign(config.naverAuthEndpoint);
+  async emailLogin(email, password) {
+    if (!usable) throw new Error('Firebase 설정값이 비어 있습니다. config.js를 먼저 입력해주세요.');
+    return (await signInWithEmailAndPassword(auth, email, password)).user;
+  },
+  async emailSignup(email, password) {
+    if (!usable) throw new Error('Firebase 설정값이 비어 있습니다. config.js를 먼저 입력해주세요.');
+    return (await createUserWithEmailAndPassword(auth, email, password)).user;
   },
   async createListing(listing) {
     const user = requireUser();
@@ -83,12 +86,34 @@ window.dispatchEvent(new Event('rewearFirebaseReady'));
 
 document.addEventListener('click', async event => {
   const google = event.target.closest('[data-login-google]');
-  const naver = event.target.closest('[data-login-naver]');
-  if (!google && !naver) return;
+  const emailOpen = event.target.closest('[data-email-open]');
+  if (!google && !emailOpen) return;
   const status = document.querySelector('[data-login-status]');
+  const form = document.querySelector('[data-email-form]');
+  if (emailOpen) {
+    form?.classList.toggle('hidden');
+    return;
+  }
   try {
     if (status) status.textContent = '로그인 창을 여는 중…';
-    await (google ? window.rewearFirebase.googleLogin() : window.rewearFirebase.naverLogin());
+    await window.rewearFirebase.googleLogin();
     if (status) status.textContent = '로그인되었습니다.';
   } catch (error) { if (status) status.textContent = error.message || '로그인에 실패했습니다.'; }
+});
+
+document.addEventListener('submit', async event => {
+  const form = event.target.closest('[data-email-form]');
+  if (!form) return;
+  event.preventDefault();
+  const status = document.querySelector('[data-login-status]');
+  const email = form.querySelector('[name=email]').value.trim();
+  const password = form.querySelector('[name=password]').value;
+  const signup = event.submitter?.matches('[data-email-signup]');
+  try {
+    if (status) status.textContent = signup ? '회원가입 중…' : '로그인 중…';
+    await (signup ? window.rewearFirebase.emailSignup(email, password) : window.rewearFirebase.emailLogin(email, password));
+    if (status) status.textContent = signup ? '회원가입 및 로그인 완료!' : '로그인되었습니다.';
+  } catch (error) {
+    if (status) status.textContent = error.message || '이메일 로그인에 실패했습니다.';
+  }
 });

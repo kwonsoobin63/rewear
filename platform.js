@@ -12,6 +12,20 @@ if (tabbar && !tabbar.querySelector('[href="profile.html"]')) {
 }
 const clothes = () => read('rewearClothes');
 const favorites = () => read('rewearFavorites');
+// 관심을 누른 즉시 상품 요약도 함께 보관한다. Firestore 목록을 불러오는 중이어도
+// MY 화면에서 관심 상품이 비어 보이지 않게 하기 위한 작은 로컬 캐시다.
+const favoriteItems = () => read('rewearFavoriteItems');
+const sameId = (one, other) => String(one) === String(other);
+const toggleFavorite = item => {
+  const ids = favorites();
+  if (ids.some(id => sameId(id, item.id))) {
+    write('rewearFavorites', ids.filter(id => !sameId(id, item.id)));
+    write('rewearFavoriteItems', favoriteItems().filter(saved => !sameId(saved.id, item.id)));
+  } else {
+    write('rewearFavorites', [...ids, item.id]);
+    write('rewearFavoriteItems', [...favoriteItems().filter(saved => !sameId(saved.id, item.id)), item]);
+  }
+};
 const empty = '<div class="empty"><h2>아직 등록된 옷이 없어요.</h2><p>새 옷을 촬영해 옷 앨범에 보관해보세요.</p></div>';
 
 const file64 = file => new Promise((resolve, reject) => {
@@ -160,16 +174,16 @@ function render(category = '전체') {
   const box = document.querySelector('#marketList'); if (!box) return;
   const user = window.rewearFirebase?.user?.();
   const items = marketItems.filter(item => category === '전체' || item.category === category);
-  box.innerHTML = items.length ? items.map(item => `<article class="listing"><button class="heart-button like-toggle" aria-label="관심 상품" data-id="${item.id}">${favorites().includes(item.id) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${item.category || '기타'} · ${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || ''}</p>${item.sellerId === user?.uid ? '<p class="notice">내가 등록한 상품입니다.</p>' : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
+  box.innerHTML = items.length ? items.map(item => `<article class="listing"><button class="heart-button like-toggle" aria-label="관심 상품" data-id="${item.id}">${favorites().some(id => sameId(id, item.id)) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${item.category || '기타'} · ${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || ''}</p>${item.sellerId === user?.uid ? '<p class="notice">내가 등록한 상품입니다.</p>' : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
   document.querySelectorAll('.chat-start').forEach(button => button.addEventListener('click', () => openChat(button.dataset)));
-  document.querySelectorAll('.like-toggle').forEach(button => button.onclick = () => { const ids = favorites(), id = button.dataset.id; write('rewearFavorites', ids.includes(id) ? ids.filter(value => value !== id) : [...ids, id]); render(category); });
+  document.querySelectorAll('.like-toggle').forEach(button => button.onclick = () => { const item = marketItems.find(entry => sameId(entry.id, button.dataset.id)); if (item) toggleFavorite(item); render(category); });
 }
 function renderFabricMarket() {
   const box = document.querySelector('#fabricMarket'); if (!box) return;
   const user = window.rewearFirebase?.user?.();
-  box.innerHTML = fabricItems.length ? fabricItems.map(item => `<article class="listing"><button class="heart-button fabric-like" aria-label="관심 상품" data-id="${item.id}">${favorites().includes(item.id) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || '원단 판매 상품'}</p>${item.sellerId === user?.uid ? '<p class="notice">내가 등록한 원단입니다.</p>' : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
+  box.innerHTML = fabricItems.length ? fabricItems.map(item => `<article class="listing"><button class="heart-button fabric-like" aria-label="관심 상품" data-id="${item.id}">${favorites().some(id => sameId(id, item.id)) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || '원단 판매 상품'}</p>${item.sellerId === user?.uid ? '<p class="notice">내가 등록한 원단입니다.</p>' : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
   document.querySelectorAll('.chat-start').forEach(button => button.addEventListener('click', () => openChat(button.dataset)));
-  document.querySelectorAll('.fabric-like').forEach(button => button.onclick = () => { const ids = favorites(), id = button.dataset.id; write('rewearFavorites', ids.includes(id) ? ids.filter(value => value !== id) : [...ids, id]); renderFabricMarket(); });
+  document.querySelectorAll('.fabric-like').forEach(button => button.onclick = () => { const item = fabricItems.find(entry => sameId(entry.id, button.dataset.id)); if (item) toggleFavorite(item); renderFabricMarket(); });
 }
 function openChat(data) {
   const firebase = window.rewearFirebase;
@@ -177,6 +191,14 @@ function openChat(data) {
   const user = firebase.user();
   if (!user) return alert('판매자와 채팅하려면 홈에서 먼저 로그인해주세요.');
   const memberIds = [user.uid, data.seller].sort(), roomId = `${data.id}_${memberIds.join('_')}`;
+  // 대화창을 여는 순간에도 부모 대화방 문서를 보장한다. 이전 버전에서 메시지만
+  // 남은 방도 이때 복구되어 판매자·구매자 양쪽 MY 목록에 나타난다.
+  if (firebase.ensureChatRoom) {
+    firebase.ensureChatRoom({ listingId: data.id, sellerId: data.seller, sellerName: data.name }).catch(error => {
+      console.error('채팅방 생성 실패:', error);
+      alert('대화방을 만들지 못했습니다. Firestore 규칙과 로그인 상태를 확인해주세요.');
+    });
+  }
   document.querySelector('#chatModal')?.remove();
   const modal = document.createElement('section');
   modal.id = 'chatModal'; modal.className = 'chat-modal';
@@ -214,7 +236,9 @@ if (myPage) {
     const user = window.rewearFirebase?.user?.();
     const mine = clothes();
     document.querySelector('#myWardrobe').innerHTML = mine.length ? mine.map(item => `<article class="listing mini"><img src="${item.photo}" alt="${item.name}"><div><b>${item.name}</b><p>${item.score == null ? '분석 전' : `손상·변형 ${item.score}%`}</p></div></article>`).join('') : '<p class="notice">저장한 옷이 없습니다.</p>';
-    const liked = allListings.filter(item => favorites().includes(item.id));
+    // 목록 실시간 수신 전에는 저장해 둔 요약을, 수신 뒤에는 최신 Firestore 상품을 쓴다.
+    const liked = [...favoriteItems(), ...allListings]
+      .filter((item, index, array) => favorites().some(id => sameId(id, item.id)) && array.findIndex(entry => sameId(entry.id, item.id)) === index);
     document.querySelector('#myLikes').innerHTML = liked.length ? liked.map(item => `<article class="listing mini"><img src="${item.photo}" alt="${item.name}"><div><b>${item.name}</b><p>${(item.price || 0).toLocaleString()}원</p></div></article>`).join('') : '<p class="notice">관심 상품이 없습니다.</p>';
     if (!user) document.querySelector('#myChats').innerHTML = '<p class="notice">채팅을 보려면 홈에서 로그인해주세요.</p>';
   };

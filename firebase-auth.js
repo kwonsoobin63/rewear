@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, doc, writeBatch } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, doc, writeBatch, setDoc } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 import { getStorage, ref, uploadString, getDownloadURL } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js';
 
 const config = window.REWEAR_CONFIG?.firebase;
@@ -78,6 +78,18 @@ window.rewearFirebase = {
   subscribeListings(callback) {
     if (!usable) return () => callback([]);
     return onSnapshot(query(collection(db, 'listings'), orderBy('createdAt', 'desc')), snapshot => callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+  },
+  async ensureChatRoom({ listingId, sellerId, sellerName = '판매자' }) {
+    const user = requireUser();
+    const participants = [user.uid, sellerId].sort();
+    const roomId = `${listingId}_${participants.join('_')}`;
+    // 예전에 메시지 하위 컬렉션만 만들어진 대화도, 다시 열면 정상 대화방 문서로 복구한다.
+    await setDoc(doc(db, 'chats', roomId), {
+      listingId, sellerId, participants,
+      participantNames: { [user.uid]: user.displayName || '사용자', [sellerId]: sellerId === user.uid ? (user.displayName || '사용자') : sellerName },
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    return roomId;
   },
   async sendMessage({ listingId, sellerId, sellerName = '판매자', text }) {
     const user = requireUser();

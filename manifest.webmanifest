@@ -1,0 +1,13 @@
+{
+  "name": "RE:WEAR",
+  "short_name": "RE:WEAR",
+  "description": "옷의 다음 생을 연결하는 순환 의류 서비스",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7fbf6",
+  "theme_color": "#f7fbf6",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

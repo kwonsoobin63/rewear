@@ -19,8 +19,10 @@ function updateAuthUi(user) {
 if (usable) {
   const app = getApps()[0] || initializeApp(config);
   auth = getAuth(app); db = getFirestore(app); storage = getStorage(app);
-  setPersistence(auth, browserLocalPersistence).catch(() => {});
-  onAuthStateChanged(auth, user => { currentUser = user; updateAuthUi(user); notify(); });
+  // 페이지 전환·새로고침 뒤에도 동일 브라우저의 Firebase 로그인을 유지한다.
+  setPersistence(auth, browserLocalPersistence)
+    .catch(() => {})
+    .finally(() => onAuthStateChanged(auth, user => { currentUser = user; updateAuthUi(user); notify(); }));
 }
 
 const requireUser = () => {

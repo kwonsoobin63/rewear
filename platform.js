@@ -15,6 +15,7 @@ const favorites = () => read('rewearFavorites');
 // 관심을 누른 즉시 상품 요약도 함께 보관한다. Firestore 목록을 불러오는 중이어도
 // MY 화면에서 관심 상품이 비어 보이지 않게 하기 위한 작은 로컬 캐시다.
 const favoriteItems = () => read('rewearFavoriteItems');
+const cartItems = () => read('rewearCart');
 const sameId = (one, other) => String(one) === String(other);
 const toggleFavorite = item => {
   const ids = favorites();
@@ -25,6 +26,17 @@ const toggleFavorite = item => {
     write('rewearFavorites', [...ids, item.id]);
     write('rewearFavoriteItems', [...favoriteItems().filter(saved => !sameId(saved.id, item.id)), item]);
   }
+};
+const updateCartCount = () => {
+  const count = document.querySelector('#cartCount');
+  if (count) count.textContent = cartItems().length;
+};
+const addToCart = item => {
+  const current = cartItems();
+  if (current.some(saved => sameId(saved.id, item.id))) return alert('이미 장바구니에 담긴 상품입니다.');
+  write('rewearCart', [...current, item]);
+  updateCartCount();
+  alert('장바구니에 담았어요.');
 };
 const empty = '<div class="empty"><h2>아직 등록된 옷이 없어요.</h2><p>새 옷을 촬영해 옷 앨범에 보관해보세요.</p></div>';
 
@@ -174,18 +186,20 @@ function render(category = '전체') {
   const box = document.querySelector('#marketList'); if (!box) return;
   const user = window.rewearFirebase?.user?.();
   const items = marketItems.filter(item => category === '전체' || item.category === category);
-  box.innerHTML = items.length ? items.map(item => `<article class="listing"><button class="heart-button like-toggle" aria-label="관심 상품" data-id="${item.id}">${favorites().some(id => sameId(id, item.id)) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${item.category || '기타'} · ${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || ''}</p>${item.sellerId === user?.uid ? `<p class="notice">내가 등록한 상품입니다.</p><button class="outline-button listing-delete" data-id="${item.id}" type="button">내 판매글 삭제</button>` : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
+  box.innerHTML = items.length ? items.map(item => `<article class="listing market-product" data-id="${item.id}"><button class="heart-button like-toggle" aria-label="관심 상품" data-id="${item.id}">${favorites().some(id => sameId(id, item.id)) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${item.category || '기타'} · ${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || ''}</p>${item.sellerId === user?.uid ? `<p class="notice">내가 등록한 상품입니다.</p><button class="outline-button listing-delete" data-id="${item.id}" type="button">내 판매글 삭제</button>` : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
   document.querySelectorAll('.chat-start').forEach(button => button.addEventListener('click', () => openChat(button.dataset)));
   document.querySelectorAll('.like-toggle').forEach(button => button.onclick = () => { const item = marketItems.find(entry => sameId(entry.id, button.dataset.id)); if (item) toggleFavorite(item); render(category); });
   document.querySelectorAll('.listing-delete').forEach(button => button.onclick = () => deleteListing(button.dataset.id));
+  document.querySelectorAll('.market-product').forEach(card => card.onclick = event => { if (!event.target.closest('button')) openProduct(marketItems.find(item => sameId(item.id, card.dataset.id))); });
 }
 function renderFabricMarket() {
   const box = document.querySelector('#fabricMarket'); if (!box) return;
   const user = window.rewearFirebase?.user?.();
-  box.innerHTML = fabricItems.length ? fabricItems.map(item => `<article class="listing"><button class="heart-button fabric-like" aria-label="관심 상품" data-id="${item.id}">${favorites().some(id => sameId(id, item.id)) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || '원단 판매 상품'}</p>${item.sellerId === user?.uid ? `<p class="notice">내가 등록한 원단입니다.</p><button class="outline-button listing-delete" data-id="${item.id}" type="button">내 판매글 삭제</button>` : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
+  box.innerHTML = fabricItems.length ? fabricItems.map(item => `<article class="listing market-product" data-id="${item.id}"><button class="heart-button fabric-like" aria-label="관심 상품" data-id="${item.id}">${favorites().some(id => sameId(id, item.id)) ? '♥' : '♡'}</button><img src="${item.photo}" class="thumb" alt="${item.name}"><h3>${item.name} ${item.sellerId === user?.uid ? '· 내 판매물품' : ''}</h3><p>${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p>${item.desc || '원단 판매 상품'}</p>${item.sellerId === user?.uid ? `<p class="notice">내가 등록한 원단입니다.</p><button class="outline-button listing-delete" data-id="${item.id}" type="button">내 판매글 삭제</button>` : `<button class="primary chat-start" data-id="${item.id}" data-seller="${item.sellerId}" data-name="${item.sellerName || '판매자'}">판매자와 채팅하기</button>`}</article>`).join('') : empty;
   document.querySelectorAll('.chat-start').forEach(button => button.addEventListener('click', () => openChat(button.dataset)));
   document.querySelectorAll('.fabric-like').forEach(button => button.onclick = () => { const item = fabricItems.find(entry => sameId(entry.id, button.dataset.id)); if (item) toggleFavorite(item); renderFabricMarket(); });
   document.querySelectorAll('.listing-delete').forEach(button => button.onclick = () => deleteListing(button.dataset.id));
+  document.querySelectorAll('.market-product').forEach(card => card.onclick = event => { if (!event.target.closest('button')) openProduct(fabricItems.find(item => sameId(item.id, card.dataset.id))); });
 }
 async function deleteListing(id) {
   if (!confirm('이 판매글을 삭제할까요? 삭제 후에는 상품 목록에서 바로 사라집니다.')) return;
@@ -196,6 +210,30 @@ async function deleteListing(id) {
     write('rewearFavorites', favorites().filter(favorite => !sameId(favorite, id)));
   } catch (error) { alert(error.message || '판매글을 삭제하지 못했습니다.'); }
 }
+function openProduct(item) {
+  if (!item) return;
+  document.querySelector('#productModal')?.remove();
+  const modal = document.createElement('section');
+  modal.id = 'productModal'; modal.className = 'chat-modal';
+  modal.innerHTML = `<div class="chat-card"><button class="chat-close" type="button">×</button><p class="eyebrow"><span></span> ITEM DETAIL</p><img class="thumb" src="${item.photo}" alt="${item.name}"><h2>${item.name}</h2><p>${(item.price || 0).toLocaleString()}원 · 손상·변형 ${item.score ?? '-'}%</p><p class="notice">${item.desc || '판매자가 작성한 설명이 없습니다.'}</p><button class="primary add-cart" type="button">장바구니에 담기</button></div>`;
+  modal.querySelector('.chat-close').onclick = () => modal.remove();
+  modal.querySelector('.add-cart').onclick = () => { addToCart(item); modal.remove(); };
+  document.body.append(modal);
+}
+function openCart() {
+  document.querySelector('#cartModal')?.remove();
+  const items = cartItems(), modal = document.createElement('section');
+  modal.id = 'cartModal'; modal.className = 'chat-modal';
+  modal.innerHTML = `<div class="chat-card"><button class="chat-close" type="button">×</button><p class="eyebrow"><span></span> CART</p><h2>장바구니</h2><div class="cart-list">${items.length ? items.map(item => `<article class="listing mini"><img src="${item.photo}" alt="${item.name}"><div><b>${item.name}</b><p>${(item.price || 0).toLocaleString()}원</p><button class="outline-button cart-remove" data-id="${item.id}" type="button">삭제</button></div></article>`).join('') : '<p class="notice">장바구니가 비어 있습니다.</p>'}</div></div>`;
+  modal.querySelector('.chat-close').onclick = () => modal.remove();
+  modal.querySelectorAll('.cart-remove').forEach(button => button.onclick = () => {
+    write('rewearCart', cartItems().filter(item => !sameId(item.id, button.dataset.id)));
+    updateCartCount(); openCart();
+  });
+  document.body.append(modal);
+}
+document.querySelector('#cart')?.addEventListener('click', openCart);
+updateCartCount();
 function openChat(data) {
   const firebase = window.rewearFirebase;
   if (!firebase?.enabled) return alert('실시간 채팅은 Firebase 설정 후 사용할 수 있습니다.');

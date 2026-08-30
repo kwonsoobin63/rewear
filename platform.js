@@ -54,16 +54,25 @@ const compactPhoto = file => new Promise((resolve, reject) => {
   const image = new Image();
   image.onload = () => {
     const longest = Math.max(image.naturalWidth, image.naturalHeight);
-    const scale = Math.min(1, 900 / longest);
+    // localStorage는 용량이 작으므로 앨범용 사진은 600px 이하로 보관한다.
+    const scale = Math.min(1, 600 / longest);
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
     canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
     canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
     URL.revokeObjectURL(url);
-    resolve(canvas.toDataURL('image/jpeg', 0.72));
+    resolve(canvas.toDataURL('image/jpeg', 0.52));
   };
   image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('이미지 형식을 읽지 못했습니다. JPG 또는 PNG 사진을 사용해주세요.')); };
   image.src = url;
+});
+
+const shrinkDataUrl = source => new Promise((resolve, reject) => {
+  const image = new Image(); image.onload = () => {
+    const canvas = document.createElement('canvas'), scale = Math.min(1, 360 / Math.max(image.naturalWidth, image.naturalHeight));
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale)); canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL('image/jpeg', .35));
+  }; image.onerror = reject; image.src = source;
 });
 
 const form = document.querySelector('#newGarment');
@@ -83,7 +92,17 @@ if (form) {
     try {
       const photo = await compactPhoto(photoInput.files[0]);
       const data = { id: Date.now(), photo, name: nameInput.value.trim(), brand: brandInput.value.trim(), date: dateInput.value, retail: +retailInput.value };
-      write('rewearClothes', [...clothes(), data]);
+      try { write('rewearClothes', [...clothes(), data]); }
+      catch (quotaError) {
+        // 이미 저장된 기록이 많을 때는 새 사진을 초경량으로 한 번 더 줄여 재시도한다.
+        data.photo = await shrinkDataUrl(data.photo);
+        let records = [...clothes(), data];
+        try { write('rewearClothes', records); }
+        catch (_) {
+          // 그래도 한도를 넘으면 가장 오래된 기록부터 정리해 새 등록을 보장한다.
+          while (records.length > 1) { records.shift(); try { write('rewearClothes', records); break; } catch (__) {} }
+        }
+      }
       form.reset();
       location.assign('wardrobe.html?saved=1');
     } catch (error) {

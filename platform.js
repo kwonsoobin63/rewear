@@ -140,7 +140,7 @@ if (analysis) {
   const garment = clothes().find(item => String(item.id) === new URLSearchParams(location.search).get('id'));
   if (!garment) analysis.innerHTML = empty;
   else {
-    analysis.innerHTML = `<article class="listing"><h3>${garment.name}</h3><p>카메라 화면의 점선 윤곽에 새 옷 사진 속 옷의 위치와 크기를 맞춘 뒤 촬영하세요.</p><div class="live-camera"><video id="currentCamera" autoplay playsinline muted></video><img id="outlineGuide" alt="새 옷 사진에서 추출한 점선 윤곽"><span>BASELINE OUTLINE · 옷 윤곽을 맞춰주세요</span></div><div class="camera-row"><button id="openCurrentCamera" class="primary" type="button">카메라 열기 <span>⌁</span></button><button id="takeCurrentPhoto" class="outline-button" type="button" disabled>사진 촬영하기</button></div><label class="upload-now">사진 앨범에서 선택<input id="currentPhoto" type="file" accept="image/*" capture="environment"></label><div id="score"></div></article>`;
+    analysis.innerHTML = `<article class="listing"><h3>${garment.name}</h3><p><strong>선택한 제품만 촬영하세요.</strong> 점선 윤곽 안에 이 옷 하나만 맞춰 배치하면 구도와 크기를 비교하기 쉽습니다.</p><div class="live-camera"><video id="currentCamera" autoplay playsinline muted></video><img id="outlineGuide" alt="선택한 새 옷의 점선 윤곽"><span>선택한 옷의 윤곽에 맞춰주세요</span></div><div class="camera-row"><button id="openCurrentCamera" class="primary" type="button">카메라 열기 <span>⌁</span></button><button id="takeCurrentPhoto" class="outline-button" type="button" disabled>사진 촬영하기</button></div><label class="upload-now">사진 앨범에서 선택<input id="currentPhoto" type="file" accept="image/*" capture="environment"></label><div id="score"></div></article>`;
     makeOutline(garment.photo).then(outline => { const guide = document.querySelector('#outlineGuide'); if (guide) guide.src = outline; }).catch(() => {});
     let stream = null;
     const stopCamera = () => { stream?.getTracks().forEach(track => track.stop()); stream = null; const video = document.querySelector('#currentCamera'); if (video) video.srcObject = null; };
@@ -242,6 +242,7 @@ function openChat(data) {
   const user = firebase.user();
   if (!user) return alert('판매자와 채팅하려면 홈에서 먼저 로그인해주세요.');
   const memberIds = [user.uid, data.seller].sort(), roomId = `${data.id}_${memberIds.join('_')}`;
+  const product = marketItems.find(item => sameId(item.id, data.id)) || fabricItems.find(item => sameId(item.id, data.id));
   // 대화창을 여는 순간에도 부모 대화방 문서를 보장한다. 이전 버전에서 메시지만
   // 남은 방도 이때 복구되어 판매자·구매자 양쪽 MY 목록에 나타난다.
   if (firebase.ensureChatRoom) {
@@ -253,7 +254,7 @@ function openChat(data) {
   document.querySelector('#chatModal')?.remove();
   const modal = document.createElement('section');
   modal.id = 'chatModal'; modal.className = 'chat-modal';
-  modal.innerHTML = `<div class="chat-card"><button class="chat-close" type="button">×</button><p class="eyebrow"><span></span> CHAT</p><h2>${data.name}님과 대화</h2><div class="messages"></div><form class="chat-form"><input required maxlength="500" placeholder="메시지를 입력하세요"><button class="primary">보내기</button></form></div>`;
+  modal.innerHTML = `<div class="chat-card"><button class="chat-close" type="button">×</button><p class="eyebrow"><span></span> CHAT</p><div class="chat-item">${product?.photo ? `<img src="${product.photo}" alt="${product.name} 상품">` : ''}<div><b>문의 상품</b><p>${product?.name || '상품'} · ${(Number(product?.price) || 0).toLocaleString()}원</p></div></div><h2>${data.name} 판매자와 대화</h2><div class="messages"></div><form class="chat-form"><input required maxlength="500" placeholder="메시지를 입력하세요"><button class="primary">보내기</button></form></div>`;
   document.body.append(modal);
   modal.querySelector('.chat-close').onclick = () => { unsubscribe?.(); modal.remove(); };
   let unsubscribe = firebase.subscribeMessages(roomId, messages => { const box = modal.querySelector('.messages'); box.innerHTML = messages.map(message => `<p class="${message.senderId === user.uid ? 'mine' : ''}">${message.text}</p>`).join(''); box.scrollTop = box.scrollHeight; });
